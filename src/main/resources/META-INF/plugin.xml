@@ -30,10 +30,13 @@
 
         <codeInsight.lineMarkerProvider language="XML"
                                         implementationClass="com.github.eatmoreapple.juice.marker.SqlIdLineMarkerProvider"/>
-        
-        <psi.referenceContributor language="XML" implementation="com.github.eatmoreapple.juice.reference.SqlIdReferenceContributor"/>
-        <psi.referenceContributor language="XML" implementation="com.github.eatmoreapple.juice.reference.SqlIncludeReferenceContributor"/>
 
+        <psi.referenceContributor language="XML"
+                                  implementation="com.github.eatmoreapple.juice.reference.SqlIdReferenceContributor"/>
+        <psi.referenceContributor language="XML"
+                                  implementation="com.github.eatmoreapple.juice.reference.SqlIncludeReferenceContributor"/>
+        <completion.contributor language="XML"
+                                implementationClass="com.github.eatmoreapple.juice.completion.SqlIdCompletionContributor"/>
         <!--        &lt;!&ndash; 参数语言注入 &ndash;&gt;-->
         <!--        <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.MapperParamLanguageInjector"/>-->
         <!--        -->
