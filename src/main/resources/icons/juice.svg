@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+    <!-- 果汁杯 -->
+    <rect x="6" y="6" width="12" height="16" rx="3" ry="3" fill="#FFEB99" stroke="#FFCC33" stroke-width="1" />
+    <rect x="7" y="7" width="10" height="14" rx="2" ry="2" fill="#FFD966" />
+
+    <!-- 果汁液面 -->
+    <path d="M7 12 C8 10, 16 10, 17 12 L17 13 C15 12, 9 12, 7 13 Z" fill="#FFAA33" />
+
+    <!-- 吸管 -->
+    <rect x="15" y="3" width="2" height="6" fill="#FF6666" />
+    <circle cx="16" cy="3" r="1" fill="#FF6666" />
+
+    <!-- 橙子 -->
+    <circle cx="6" cy="9" r="5" fill="#FFA500" stroke="#FF7F00" stroke-width="1" />
+    <!-- 橙子分割线 -->
+    <line x1="6" y1="4" x2="6" y2="14" stroke="#FFF" stroke-width="1" />
+    <line x1="3" y1="9" x2="9" y2="9" stroke="#FFF" stroke-width="1" />
+    <line x1="4" y1="6" x2="8" y2="12" stroke="#FFF" stroke-width="1" />
+    <line x1="8" y1="6" x2="4" y2="12" stroke="#FFF" stroke-width="1" />
+
+    <!-- 橙子叶子 -->
+    <path d="M6 4 C6.5 3, 7.5 3, 8 4 C7.5 3.5, 6.5 3.5, 6 4 Z" fill="#66CC66" />
+</svg>

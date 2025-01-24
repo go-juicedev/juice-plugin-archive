@@ -6,31 +6,40 @@
     <description>A GoLand plugin for MyBatis-style SQL mapping support</description>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.go</depends>
+    <depends>org.jetbrains.plugins.go</depends>
+    <depends>com.intellij.modules.goland</depends>
     <depends>com.intellij.modules.lang</depends>
     <depends>com.intellij.modules.xml</depends>
     <depends>com.intellij.database</depends>
 
+    <extensions defaultExtensionNs="com.goide">
+        <codeInsight.lineMarkerProvider language="XML"
+                                        implementationClass="com.github.eatmoreapple.juice.marker.SqlIdLineMarkerProvider"/>
+    </extensions>
+
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.lineMarkerProvider language="XML"
-                                      implementationClass="com.github.eatmoreapple.juice.marker.MapperResourceLineMarkerProvider"/>
+                                        implementationClass="com.github.eatmoreapple.juice.marker.MapperResourceLineMarkerProvider"/>
         <psi.referenceContributor language="XML"
-                                implementation="com.github.eatmoreapple.juice.reference.MapperResourceReferenceContributor"/>
+                                  implementation="com.github.eatmoreapple.juice.reference.MapperResourceReferenceContributor"/>
         <annotator language="XML"
-                  implementationClass="com.github.eatmoreapple.juice.annotator.MapperResourceAnnotator"/>
-                  
+                   implementationClass="com.github.eatmoreapple.juice.annotator.MapperResourceAnnotator"/>
+
         <!-- SQL语言注入 -->
         <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.SqlLanguageInjector"/>
-        
-        <!-- 参数语言注入 -->
-        <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.MapperParamLanguageInjector"/>
-        
-        <!-- 参数语法高亮 -->
-        <lang.syntaxHighlighter language="MapperParam" 
-            implementationClass="com.github.eatmoreapple.juice.highlight.MapperParamSyntaxHighlighter"/>
-        
-        <!-- 参数高亮 -->
-        <annotator language="MapperParam"
-                  implementationClass="com.github.eatmoreapple.juice.annotator.MapperParamAnnotator"/>
+
+        <codeInsight.lineMarkerProvider language="XML"
+                                        implementationClass="com.github.eatmoreapple.juice.marker.SqlIdLineMarkerProvider"/>
+
+        <!--        &lt;!&ndash; 参数语言注入 &ndash;&gt;-->
+        <!--        <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.MapperParamLanguageInjector"/>-->
+        <!--        -->
+        <!--        &lt;!&ndash; 参数语法高亮 &ndash;&gt;-->
+        <!--        <lang.syntaxHighlighter language="MapperParam" -->
+        <!--            implementationClass="com.github.eatmoreapple.juice.highlight.MapperParamSyntaxHighlighter"/>-->
+        <!--        -->
+        <!--        &lt;!&ndash; 参数高亮 &ndash;&gt;-->
+        <!--        <annotator language="MapperParam"-->
+        <!--                  implementationClass="com.github.eatmoreapple.juice.annotator.MapperParamAnnotator"/>-->
     </extensions>
 </idea-plugin>
