@@ -12,7 +12,7 @@ repositories {
 
 // Configure Gradle IntelliJ Plugin
 intellij {
-    localPath.set("/Users/eatmoreapple/Applications/GoLand.app/Contents")
+    version.set("2023.1") // 指定 IntelliJ IDEA 版本
     type.set("GO")
     plugins.set(listOf(
         "com.intellij.database",
@@ -36,7 +36,7 @@ tasks {
     }
 
     patchPluginXml {
-        sinceBuild.set("241")
-        untilBuild.set("241.*")
+        sinceBuild.set("241")  // 最低支持的 IDE 版本
+        untilBuild.set("243.*")  // 最高支持的 IDE 版本
     }
 }
