@@ -1,6 +1,8 @@
 package com.github.eatmoreapple.juice.marker;
 
 import com.goide.psi.GoMethodSpec;
+import com.goide.psi.GoSpecType;
+import com.goide.psi.impl.GoSpecTypeImpl;
 import com.goide.stubs.index.GoMethodSpecFingerprintIndex;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerProvider;
@@ -34,7 +36,7 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 String sqlId = xmlElement.getAttributeValue("id"); // 获取 SQL 方法 ID
                 if (sqlId != null) {
                     // 查找对应的 Go 方法
-                    PsiElement target = findGoMethodById(sqlId, xmlElement.getProject());
+                    PsiElement target = findGoMethodById(sqlId, xmlElement.getProject(), ((XmlTag) parent).getAttributeValue("namespace"));
                     if (target != null) {
                         NavigationGutterIconBuilder<PsiElement> builder = NavigationGutterIconBuilder
                                 .create(AllIcons.Gutter.ImplementingMethod)
@@ -48,7 +50,7 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
         }
     }
 
-    private PsiElement findGoMethodById(String id, Project project) {
+    private PsiElement findGoMethodById(String id, Project project, String namespace) {
         try {
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
             HashSet<String> allKeys = (HashSet<String>) StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project);
@@ -56,7 +58,16 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 if (key.split("/")[0].equals(id)) {
                     Collection<GoMethodSpec> elements = StubIndex.getElements(GoMethodSpecFingerprintIndex.KEY, key, project, scope, GoMethodSpec.class);
                     if (!elements.isEmpty()) {
-                        return elements.stream().toList().get(0);
+                        return elements.stream().toList().stream()
+                                .filter(e -> {
+                                    if (e.getParent().getContext() instanceof GoSpecType parent) {
+                                        String interfaceName = parent.getIdentifier().getText();
+                                        return namespace.endsWith(interfaceName);
+                                    }
+                                    return false;
+                                })
+                                .findFirst()
+                                .orElse(null);
                     }
                 }
             }
