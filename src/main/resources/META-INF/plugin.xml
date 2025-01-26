@@ -35,6 +35,7 @@
                                   implementation="com.github.eatmoreapple.juice.reference.SqlIdReferenceContributor"/>
         <psi.referenceContributor language="XML"
                                   implementation="com.github.eatmoreapple.juice.reference.SqlIncludeReferenceContributor"/>
+        <psi.referenceContributor implementation="com.github.eatmoreapple.juice.reference.NamespaceReferenceContributor"/>
         <completion.contributor language="XML"
                                 implementationClass="com.github.eatmoreapple.juice.completion.SqlIdCompletionContributor"/>
         <codeInsight.lineMarkerProvider language="go"
