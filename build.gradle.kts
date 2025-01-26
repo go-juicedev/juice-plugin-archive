@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.github.eatmoreapple"
-version = "1.0-SNAPSHOT"
+version = "1.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -38,5 +38,6 @@ tasks {
     patchPluginXml {
         sinceBuild.set("241")  // 最低支持的 IDE 版本
         untilBuild.set("243.*")  // 最高支持的 IDE 版本
+        version.set(project.version.toString())
     }
 }
