@@ -6,6 +6,7 @@ import com.goide.psi.GoTypeSpec;
 import com.intellij.codeInsight.completion.*;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -58,12 +59,30 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                                 currentText = currentText.substring(0, currentText.length() - "IntellijIdeaRulezzz".length());
                             }
 
-                            // 如果输入为空，提供模块名补全
-                            if (currentText.isEmpty()) {
-                                result.addElement(LookupElementBuilder.create(moduleName + ".")
-                                        .withPresentableText(moduleName + ".")
+                            // 如果输入为空或只有一个点号，提供模块名补全
+                            if (currentText.isEmpty() || currentText.equals(".")) {
+                                result.addElement(LookupElementBuilder.create(moduleName)
+                                        .withPresentableText(moduleName)
                                         .withTypeText("Module")
-                                        .withBoldness(true));
+                                        .withBoldness(true)
+                                        .withInsertHandler((insertContext, item) -> {
+                                            // 如果原始输入是点号开头，需要删除这个点号
+                                            if (parameters.getPosition().getText().startsWith(".")) {
+                                                Editor editor = insertContext.getEditor();
+                                                Document document = editor.getDocument();
+                                                int startOffset = insertContext.getStartOffset() - 1;
+                                                if (startOffset >= 0) {
+                                                    document.deleteString(startOffset, startOffset + 1);
+                                                }
+                                            }
+                                            // 自动触发下一级补全
+                                            insertContext.setLaterRunnable(() -> {
+                                                Editor editor = insertContext.getEditor();
+                                                new CodeCompletionHandlerBase(CompletionType.BASIC)
+                                                    .invokeCompletion(insertContext.getProject(), editor);
+                                                editor.getCaretModel().moveToOffset(editor.getCaretModel().getOffset());
+                                            });
+                                        }));
                                 return;
                             }
 
