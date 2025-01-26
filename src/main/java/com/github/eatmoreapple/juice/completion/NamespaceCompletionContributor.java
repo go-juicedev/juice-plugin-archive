@@ -123,8 +123,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             // 添加子目录
                             for (VirtualFile child : currentDir.getChildren()) {
                                 if (child.isDirectory() && !child.getName().startsWith(".")) {
-                                    String suggestion = getRelativePath(baseDir, child);
-                                    suggestions.add(suggestion);
+                                    suggestions.add(child.getName());
                                 }
                             }
 
@@ -136,15 +135,8 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                                         GoFile goFile = (GoFile) psiFile;
                                         for (GoTypeSpec typeSpec : goFile.getTypes()) {
                                             String typeName = typeSpec.getName();
-                                            // 检查类型名是否以 Repository 结尾
                                             if (typeName != null && typeName.endsWith("Repository")) {
-                                                String suggestion = getRelativePath(baseDir, child.getParent());
-                                                // 如果不是基目录，添加点号
-                                                if (!suggestion.isEmpty()) {
-                                                    suggestion += ".";
-                                                }
-                                                suggestion += typeName;
-                                                suggestions.add(suggestion);
+                                                suggestions.add(typeName);
                                             }
                                         }
                                     }
@@ -153,38 +145,23 @@ public class NamespaceCompletionContributor extends CompletionContributor {
 
                             // 添加补全建议
                             for (String suggestion : suggestions) {
-                                // 获取显示文本（最后一个点号后的内容）
-                                String displayText = suggestion;
-                                int lastDot = suggestion.lastIndexOf(".");
-                                if (lastDot != -1) {
-                                    displayText = suggestion.substring(lastDot + 1);
-                                }
+                                String[] parts = suggestion.split("\\.");
+                                String lastPart = parts[parts.length - 1];
+                                boolean needsDot = !currentText.endsWith(".");
                                 
-                                // 构建完整建议
-                                String fullSuggestion = moduleName + "." + suggestion;
-                                
-                                // 如果当前输入以点号结尾，只显示当前级别
-                                if (currentText.endsWith(".")) {
-                                    result.addElement(LookupElementBuilder.create(fullSuggestion)
-                                            .withPresentableText(displayText)
-                                            .withTypeText(suggestion.contains(".") ? "Package" : "Interface"));
-                                } else {
-                                    // 否则显示完整路径
-                                    result.addElement(LookupElementBuilder.create(fullSuggestion + ".")
-                                            .withPresentableText(displayText + ".")
-                                            .withTypeText(suggestion.contains(".") ? "Package" : "Interface")
-                                            .withInsertHandler((insertContext, item) -> {
-                                                // 如果插入的是包路径（以.结尾），自动触发下一级的补全
-                                                if (item.getLookupString().endsWith(".")) {
-                                                    insertContext.setLaterRunnable(() -> {
-                                                        Editor editor = insertContext.getEditor();
-                                                        new CodeCompletionHandlerBase(CompletionType.BASIC)
-                                                            .invokeCompletion(project, editor);
-                                                        editor.getCaretModel().moveToOffset(editor.getCaretModel().getOffset());
-                                                    });
-                                                }
-                                            }));
-                                }
+                                result.addElement(LookupElementBuilder.create(lastPart)
+                                        .withPresentableText(lastPart)
+                                        .withTypeText("Package")
+                                        .withInsertHandler((insertContext, item) -> {
+                                            if (needsDot) {
+                                                Editor editor = insertContext.getEditor();
+                                                Document document = editor.getDocument();
+                                                document.insertString(insertContext.getTailOffset(), ".");
+                                                editor.getCaretModel().moveToOffset(insertContext.getTailOffset());
+                                                new CodeCompletionHandlerBase(CompletionType.BASIC)
+                                                    .invokeCompletion(project, editor);
+                                            }
+                                        }));
                             }
                         } catch (Exception e) {
                             log.warn("Error in namespace completion", e);
