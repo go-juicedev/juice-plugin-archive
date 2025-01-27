@@ -71,7 +71,8 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 log.warn("Containing file is not a Go file");
                 return;
             }
-            String packagePath = ((GoFile) containingFile).getPackageName();
+//             String packagePath = ((GoFile) containingFile).getPackageName();
+            String packagePath = containingFile.getVirtualFile().getParent().getPath().substring(containingFile.getProject().getBasePath().length() + 1);
             if (packagePath == null) {
                 log.warn("Package path is null");
                 return;
@@ -142,7 +143,7 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
                 // 检查接口名和包路径是否匹配
                 boolean interfaceMatch = interfaceName.equals(nsInterfaceName);
-                boolean packageMatch = packagePath.endsWith(nsPackagePath);
+                boolean packageMatch = nsPackagePath.equals(packagePath);
                 log.warn("Interface match: " + interfaceMatch + ", Package match: " + packageMatch);
 
                 if (!interfaceMatch || !packageMatch) {
