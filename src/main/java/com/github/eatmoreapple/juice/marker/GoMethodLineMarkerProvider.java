@@ -63,7 +63,6 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
         try {
             GoTypeSpec typeSpec = (GoTypeSpec) parent;
             String interfaceName = typeSpec.getIdentifier().getText();
-            log.warn("Found method: " + methodName + " in interface: " + interfaceName);
 
             // 获取包路径
             PsiFile containingFile = element.getContainingFile();
@@ -77,7 +76,6 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 log.warn("Package path is null");
                 return;
             }
-            log.warn("Package path: " + packagePath);
 
             // 获取模块名
             String moduleName = ModuleUtils.getModuleName(element.getProject());
@@ -85,18 +83,15 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 log.warn("Module name is null");
                 return;
             }
-            log.warn("Module name: " + moduleName);
 
             // 在项目中查找所有 XML 文件
             Collection<VirtualFile> xmlFiles = FilenameIndex.getAllFilesByExt(
                     element.getProject(), "xml", GlobalSearchScope.projectScope(element.getProject()));
-            log.warn("Found " + xmlFiles.size() + " XML files");
 
             List<PsiElement> targets = new ArrayList<>();
 
             // 遍历 XML 文件查找匹配的标签
             for (VirtualFile xmlFile : xmlFiles) {
-                log.warn("Checking XML file: " + xmlFile.getPath());
                 PsiFile psiFile = PsiManager.getInstance(element.getProject()).findFile(xmlFile);
                 if (!(psiFile instanceof XmlFile)) {
                     continue;
@@ -112,14 +107,12 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 if (xmlNamespace == null) {
                     continue;
                 }
-                log.warn("XML namespace: " + xmlNamespace);
 
                 // 去掉 namespace 中的 module name 前缀
                 String relativeNamespace = xmlNamespace;
                 if (xmlNamespace.startsWith(moduleName)) {
                     relativeNamespace = xmlNamespace.substring(moduleName.length() + 1); // 去掉前缀和后面的 "."
                 }
-                log.warn("Relative namespace: " + relativeNamespace);
 
                 // 解析 namespace
                 String[] parts = relativeNamespace.split("\\.");
@@ -136,15 +129,10 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                     nsPackagePathBuilder.append("/").append(parts[i]);
                 }
                 String nsPackagePath = nsPackagePathBuilder.toString();
-                log.warn("Namespace package path: " + nsPackagePath);
-                log.warn("Namespace interface name: " + nsInterfaceName);
-                log.warn("Current package path: " + packagePath);
-                log.warn("Current interface name: " + interfaceName);
 
                 // 检查接口名和包路径是否匹配
                 boolean interfaceMatch = interfaceName.equals(nsInterfaceName);
                 boolean packageMatch = nsPackagePath.equals(packagePath);
-                log.warn("Interface match: " + interfaceMatch + ", Package match: " + packageMatch);
 
                 if (!interfaceMatch || !packageMatch) {
                     continue;
