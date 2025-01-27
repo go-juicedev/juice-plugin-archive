@@ -213,12 +213,13 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                     line = line.trim();
                     if (line.startsWith("module ")) {
                         String moduleName = line.substring("module ".length()).trim();
-                        return moduleName;
+                        // 将点号替换为斜杠
+                        return moduleName.replace("/", ".");
                     }
                 }
             }
         } catch (IOException e) {
-            log.warn("Failed to read go.mod file", e);
+            log.warn("Error reading go.mod file", e);
         }
         return null;
     }

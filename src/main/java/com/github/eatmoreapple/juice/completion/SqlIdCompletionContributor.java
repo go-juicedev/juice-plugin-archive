@@ -164,7 +164,7 @@ public class SqlIdCompletionContributor extends CompletionContributor {
                 // 匹配 module 指令
                 Matcher matcher = modulePattern.matcher(line.trim());
                 if (matcher.matches()) {
-                    return matcher.group(1); // 返回 module name
+                    return matcher.group(1).replace("/", "."); // 返回 module name
                 }
             }
         } catch (IOException e) {

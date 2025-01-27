@@ -201,7 +201,7 @@ public class GoMethodLineMarkerProvider extends RelatedItemLineMarkerProvider {
                     if (line.startsWith("module ")) {
                         String moduleName = line.substring("module ".length()).trim();
                         log.warn("Found module name: " + moduleName);
-                        return moduleName;
+                        return moduleName.replace("/", ".");
                     }
                 }
             }

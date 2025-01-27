@@ -109,7 +109,7 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
                     if (line.startsWith("module ")) {
-                        return line.substring("module ".length()).trim();
+                        return line.substring("module ".length()).trim().replace("/", ".");
                     }
                 }
             }
