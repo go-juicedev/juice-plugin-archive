@@ -16,8 +16,11 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.xml.XmlAttribute;
+import com.intellij.psi.xml.XmlFile;
+import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
+import com.github.eatmoreapple.juice.util.ModuleUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -45,7 +48,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
 
                         try {
                             // 获取模块名
-                            String moduleName = getModuleName(project);
+                            String moduleName = ModuleUtils.getModuleName(project);
                             if (moduleName == null) {
                                 return;
                             }
@@ -186,41 +189,5 @@ public class NamespaceCompletionContributor extends CompletionContributor {
             return relativePath.replace('/', '.');
         }
         return "";
-    }
-
-    /**
-     * 获取模块名
-     */
-    private String getModuleName(Project project) {
-        try {
-            // 获取项目的根目录
-            String basePath = project.getBasePath();
-            if (basePath == null) {
-                return null;
-            }
-
-            // 找到 go.mod 文件
-            VirtualFile goModFile = project.getBaseDir().findChild("go.mod");
-            if (goModFile == null || !goModFile.exists()) {
-                return null;
-            }
-
-            // 读取 go.mod 文件内容
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(goModFile.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("module ")) {
-                        String moduleName = line.substring("module ".length()).trim();
-                        // 将点号替换为斜杠
-                        return moduleName.replace("/", ".");
-                    }
-                }
-            }
-        } catch (IOException e) {
-            log.warn("Error reading go.mod file", e);
-        }
-        return null;
     }
 }

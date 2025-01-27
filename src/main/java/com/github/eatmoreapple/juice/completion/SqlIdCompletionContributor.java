@@ -35,6 +35,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.github.eatmoreapple.juice.util.ModuleUtils;
+
 /**
  * @author pjh
  * @date 2025/1/24
@@ -90,8 +92,8 @@ public class SqlIdCompletionContributor extends CompletionContributor {
                             }
 
                             // 获取当前项目的 module name
-                            String moduleName = getModuleName(position.getProject());
-                            if (moduleName == null || moduleName.isEmpty()) {
+                            String moduleName = ModuleUtils.getModuleName(position.getProject());
+                            if (moduleName == null) {
                                 return;
                             }
 
@@ -136,41 +138,5 @@ public class SqlIdCompletionContributor extends CompletionContributor {
                     }
                 }
         );
-    }
-
-    /**
-     * 获取当前项目的 module name
-     */
-    @Nullable
-    private String getModuleName(Project project) {
-        // 获取项目的根目录
-        String basePath = project.getBasePath();
-        if (basePath == null) {
-            return null;
-        }
-
-        // 找到 go.mod 文件
-        VirtualFile goModFile = project.getBaseDir().findChild("go.mod");
-        if (goModFile == null || !goModFile.exists()) {
-            return null; // go.mod 文件不存在
-        }
-
-        // 读取 go.mod 文件内容
-        try (InputStream inputStream = goModFile.getInputStream();
-             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-            String line;
-            Pattern modulePattern = Pattern.compile("^module\\s+(.+)$");
-            while ((line = reader.readLine()) != null) {
-                // 匹配 module 指令
-                Matcher matcher = modulePattern.matcher(line.trim());
-                if (matcher.matches()) {
-                    return matcher.group(1).replace("/", "."); // 返回 module name
-                }
-            }
-        } catch (IOException e) {
-            log.warn("Failed to read go.mod file", e);
-        }
-
-        return null; // 未找到 module 指令
     }
 }

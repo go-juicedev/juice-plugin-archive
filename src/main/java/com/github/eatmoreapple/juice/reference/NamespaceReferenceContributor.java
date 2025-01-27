@@ -12,6 +12,7 @@ import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import com.github.eatmoreapple.juice.util.ModuleUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -32,23 +33,20 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                     @Override
                     public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement element,
                                                                          @NotNull ProcessingContext context) {
-                        XmlAttributeValue value = (XmlAttributeValue) element;
-                        String text = value.getValue();
-                        
-                        // 如果值为空，返回空引用
-                        if (text == null || text.isEmpty()) {
+                        Project project = element.getProject();
+                        XmlAttributeValue xmlAttributeValue = (XmlAttributeValue) element;
+                        String value = xmlAttributeValue.getValue();
+                        if (value == null) {
                             return PsiReference.EMPTY_ARRAY;
                         }
-
                         // 获取模块名
-                        Project project = element.getProject();
-                        String moduleName = getModuleName(project);
-                        if (moduleName == null || !text.startsWith(moduleName)) {
+                        String moduleName = ModuleUtils.getModuleName(project);
+                        if (moduleName == null) {
                             return PsiReference.EMPTY_ARRAY;
                         }
 
                         // 解析路径部分
-                        String path = text.substring(moduleName.length());
+                        String path = value.substring(moduleName.length());
                         if (path.startsWith(".")) {
                             path = path.substring(1);
                         }
@@ -58,7 +56,7 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                         List<PsiReference> references = new ArrayList<>();
                         
                         // 计算每个部分的文本范围并创建引用
-                        int startOffset = value.getValueTextRange().getStartOffset() - value.getTextRange().getStartOffset();
+                        int startOffset = xmlAttributeValue.getValueTextRange().getStartOffset() - xmlAttributeValue.getTextRange().getStartOffset();
                         int currentOffset = startOffset + moduleName.length() + 1; // +1 for the dot after module name
                         
                         VirtualFile baseDir = project.getBaseDir();
@@ -91,32 +89,6 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                         return references.toArray(new PsiReference[0]);
                     }
                 });
-    }
-
-    /**
-     * 获取模块名
-     */
-    private String getModuleName(Project project) {
-        try {
-            VirtualFile goModFile = project.getBaseDir().findChild("go.mod");
-            if (goModFile == null || !goModFile.exists()) {
-                return null;
-            }
-
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(goModFile.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("module ")) {
-                        return line.substring("module ".length()).trim().replace("/", ".");
-                    }
-                }
-            }
-        } catch (IOException e) {
-            return null;
-        }
-        return null;
     }
 
     /**
