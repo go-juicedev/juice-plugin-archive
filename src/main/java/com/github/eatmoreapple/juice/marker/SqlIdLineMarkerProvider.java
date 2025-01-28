@@ -13,6 +13,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.stubs.StubIndex;
 import com.intellij.psi.xml.XmlTag;
+import com.github.eatmoreapple.juice.util.ModuleUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,30 +53,42 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
     private PsiElement findGoMethodById(String id, Project project, String namespace) {
         try {
+            // 解析命名空间路径
+            String moduleName = ModuleUtils.getModuleName(project);
+            String interfacePath = namespace.substring(moduleName.length()).replace(".", "/");
+            String[] pathParts = interfacePath.split("/");
+            String interfaceName = pathParts[pathParts.length - 1];
+            String dirPath = interfacePath.substring(0, interfacePath.lastIndexOf("/"));
+            log.info("Interface path: {}, Interface name: {}", interfacePath, interfaceName);
+
+            // 搜索匹配的方法
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-            HashSet<String> allKeys = (HashSet<String>) StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project);
-            for (String key : allKeys) {
-                if (key.split("/")[0].equals(id)) {
-                    Collection<GoMethodSpec> elements = StubIndex.getElements(GoMethodSpecFingerprintIndex.KEY, key, project, scope, GoMethodSpec.class);
-                    if (!elements.isEmpty()) {
-                        return elements.stream().toList().stream()
-                                .filter(e -> {
-                                    if (e.getParent().getContext() instanceof GoSpecType parent) {
-                                        String interfaceName = parent.getIdentifier().getText();
-                                        return namespace.endsWith(interfaceName);
-                                    }
-                                    return false;
-                                })
-                                .findFirst()
-                                .orElse(null);
-                    }
-                }
-            }
-            return null;
+            Collection<GoMethodSpec> matchedMethods = StubIndex.getElements(
+                    GoMethodSpecFingerprintIndex.KEY,
+                    StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project).stream()
+                            .filter(key -> key.split("/")[0].equals(id))
+                            .findFirst()
+                            .orElse(""),
+                    project,
+                    scope,
+                    GoMethodSpec.class
+            );
+
+            // 过滤并返回匹配的方法
+            return matchedMethods.stream()
+                    .filter(method -> {
+                        if (method.getParent().getContext() instanceof GoSpecType parent) {
+                            String methodInterfaceName = parent.getIdentifier().getText();
+                            String methodDirPath = parent.getContainingFile().getVirtualFile().getParent().getPath();
+                            return methodDirPath.endsWith(dirPath) && interfaceName.equals(methodInterfaceName);
+                        }
+                        return false;
+                    })
+                    .findFirst()
+                    .orElse(null);
         } catch (Exception e) {
             log.warn("Failed to find Go method by id: {}", id, e);
+            return null;
         }
-        return null;
     }
-
 }
