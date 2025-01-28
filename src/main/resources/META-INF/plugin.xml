@@ -2,8 +2,11 @@
 <idea-plugin>
     <id>com.github.eatmoreapple.juice</id>
     <name>Juice</name>
-    <vendor>eatmoreapple</vendor>
-    <description>A GoLand plugin for MyBatis-style SQL mapping support</description>
+    <vendor email="eatmoreorange@gmail.com">eatmoreapple</vendor>
+    
+<description><![CDATA[
+        <p>Juice is a GoLand plugin that provides enhanced support for MyBatis-style SQL mapping in Go projects. It enables seamless navigation between SQL IDs in XML files and their corresponding Go methods, improving developer productivity and code readability.</p>
+    ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.go</depends>
