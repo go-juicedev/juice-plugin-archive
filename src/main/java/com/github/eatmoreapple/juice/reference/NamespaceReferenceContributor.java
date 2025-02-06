@@ -46,6 +46,9 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                         }
 
                         // 解析路径部分
+                        if (value.length() < moduleName.length()) {
+                            return PsiReference.EMPTY_ARRAY;
+                        }
                         String path = value.substring(moduleName.length());
                         if (path.startsWith(".")) {
                             path = path.substring(1);

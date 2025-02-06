@@ -65,9 +65,6 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             // 如果输入为空或只有一个点号，提供模块名补全
                             if (currentText.isEmpty() || currentText.equals(".")) {
                                 result.addElement(LookupElementBuilder.create(moduleName)
-                                        .withPresentableText(moduleName)
-                                        .withTypeText("Module")
-                                        .withBoldness(true)
                                         .withInsertHandler((insertContext, item) -> {
                                             // 如果原始输入是点号开头，需要删除这个点号
                                             if (parameters.getPosition().getText().startsWith(".")) {
