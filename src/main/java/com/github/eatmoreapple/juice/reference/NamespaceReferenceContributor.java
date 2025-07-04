@@ -72,10 +72,10 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                             
                             TextRange range = new TextRange(currentOffset, currentOffset + part.length());
                             
-                            // 检查是否是最后一个部分（可能是接口）
-                            if (i == parts.length - 1 && part.endsWith("Repository")) {
-                                // 为接口创建引用
-                                references.add(new InterfaceReference(element, range, currentDir, part));
+                            // 检查是否是最后一个部分
+                            if (i == parts.length - 1) {
+                                // 最后一个部分可能是类型名称，创建类型引用
+                                references.add(new TypeReference(element, range, currentDir, part));
                             } else {
                                 // 为目录创建引用
                                 references.add(new DirectoryReference(element, range, currentDir, part));
@@ -119,13 +119,13 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
     }
 
     /**
-     * 接口引用
+     * 类型引用
      */
-    private static class InterfaceReference extends PsiReferenceBase<PsiElement> {
+    private static class TypeReference extends PsiReferenceBase<PsiElement> {
         private final VirtualFile currentDir;
         private final String targetName;
 
-        public InterfaceReference(@NotNull PsiElement element, @NotNull TextRange range,
+        public TypeReference(@NotNull PsiElement element, @NotNull TextRange range,
                                 @NotNull VirtualFile currentDir, @NotNull String targetName) {
             super(element, range);
             this.currentDir = currentDir;
@@ -143,7 +143,7 @@ public class NamespaceReferenceContributor extends PsiReferenceContributor {
                     PsiFile psiFile = psiManager.findFile(child);
                     if (psiFile instanceof GoFile) {
                         GoFile goFile = (GoFile) psiFile;
-                        // 查找目标接口
+                        // 查找目标类型（不再限制仅查找接口）
                         for (GoTypeSpec typeSpec : goFile.getTypes()) {
                             if (targetName.equals(typeSpec.getName())) {
                                 return typeSpec;
