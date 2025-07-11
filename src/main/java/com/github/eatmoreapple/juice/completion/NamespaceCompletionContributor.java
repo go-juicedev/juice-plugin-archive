@@ -10,6 +10,8 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.ui.JBColor;
+import com.intellij.icons.AllIcons;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.patterns.XmlPatterns;
 import com.intellij.psi.PsiElement;
@@ -71,7 +73,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             }
 
                             // 收集补全建议
-                            Set<String> suggestions = collectSuggestions(project, currentDir);
+                            Set<CompletionSuggestion> suggestions = collectSuggestions(project, currentDir);
 
                             // 添加补全建议
                             addSuggestionsToResult(result, suggestions, currentText, project);
@@ -198,8 +200,8 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      * 收集补全建议
      */
     @NotNull
-    private Set<String> collectSuggestions(@NotNull Project project, @NotNull VirtualFile currentDir) {
-        Set<String> suggestions = new HashSet<>();
+    private Set<CompletionSuggestion> collectSuggestions(@NotNull Project project, @NotNull VirtualFile currentDir) {
+        Set<CompletionSuggestion> suggestions = new HashSet<>();
         
         // 添加子目录
         collectDirectorySuggestions(currentDir, suggestions);
@@ -211,12 +213,48 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
+     * 补全建议类型
+     */
+    private static class CompletionSuggestion {
+        private final String name;
+        private final SuggestionType type;
+        
+        public CompletionSuggestion(String name, SuggestionType type) {
+            this.name = name;
+            this.type = type;
+        }
+        
+        public String getName() { return name; }
+        public SuggestionType getType() { return type; }
+        
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CompletionSuggestion that = (CompletionSuggestion) o;
+            return name.equals(that.name) && type == that.type;
+        }
+        
+        @Override
+        public int hashCode() {
+            return name.hashCode() * 31 + type.hashCode();
+        }
+    }
+    
+    /**
+     * 建议类型枚举
+     */
+    private enum SuggestionType {
+        DIRECTORY, INTERFACE
+    }
+
+    /**
      * 收集目录建议
      */
-    private void collectDirectorySuggestions(@NotNull VirtualFile currentDir, @NotNull Set<String> suggestions) {
+    private void collectDirectorySuggestions(@NotNull VirtualFile currentDir, @NotNull Set<CompletionSuggestion> suggestions) {
         for (VirtualFile child : currentDir.getChildren()) {
             if (child.isDirectory() && !child.getName().startsWith(DOT)) {
-                suggestions.add(child.getName());
+                suggestions.add(new CompletionSuggestion(child.getName(), SuggestionType.DIRECTORY));
             }
         }
     }
@@ -224,7 +262,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     /**
      * 收集接口建议
      */
-    private void collectInterfaceSuggestions(@NotNull Project project, @NotNull VirtualFile currentDir, @NotNull Set<String> suggestions) {
+    private void collectInterfaceSuggestions(@NotNull Project project, @NotNull VirtualFile currentDir, @NotNull Set<CompletionSuggestion> suggestions) {
         PsiManager psiManager = PsiManager.getInstance(project);
         
         for (VirtualFile child : currentDir.getChildren()) {
@@ -240,13 +278,13 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     /**
      * 处理Go文件，仅提取接口类型
      */
-    private void processGoFile(@NotNull GoFile goFile, @NotNull Set<String> suggestions) {
+    private void processGoFile(@NotNull GoFile goFile, @NotNull Set<CompletionSuggestion> suggestions) {
         for (GoTypeSpec typeSpec : goFile.getTypes()) {
             // 通过检查是否有方法来判断是否为接口
             if (isInterfaceType(typeSpec)) {
                 String typeName = typeSpec.getName();
                 if (typeName != null) {
-                    suggestions.add(typeName);
+                    suggestions.add(new CompletionSuggestion(typeName, SuggestionType.INTERFACE));
                 }
             }
         }
@@ -269,16 +307,19 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      * 添加补全建议到结果集
      */
     private void addSuggestionsToResult(@NotNull CompletionResultSet result, 
-                                      @NotNull Set<String> suggestions, 
+                                      @NotNull Set<CompletionSuggestion> suggestions, 
                                       @NotNull String currentText,
                                       @NotNull Project project) {
         boolean needsDot = !currentText.endsWith(DOT);
         
-        for (String suggestion : suggestions) {
-            String[] parts = suggestion.split("\\.");
+        for (CompletionSuggestion suggestion : suggestions) {
+            String name = suggestion.getName();
+            SuggestionType type = suggestion.getType();
+            
+            String[] parts = name.split("\\.");
             String lastPart = parts[parts.length - 1];
             
-            LookupElement element = createLookupElement(lastPart, needsDot, project);
+            LookupElement element = createLookupElement(lastPart, type, needsDot, project);
             result.addElement(element);
         }
     }
@@ -287,16 +328,31 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      * 创建补全元素
      */
     @NotNull
-    private LookupElement createLookupElement(@NotNull String text, boolean needsDot, @NotNull Project project) {
-        return LookupElementBuilder.create(text)
-                .withPresentableText(text)
-                .withTypeText("Package")
-                .withInsertHandler((insertContext, item) -> {
-                    if (needsDot) {
-                        // 插入点号并触发下一级补全
-                        insertDotAndTriggerCompletion(insertContext, project);
-                    }
-                });
+    private LookupElement createLookupElement(@NotNull String text, @NotNull SuggestionType type, 
+                                            boolean needsDot, @NotNull Project project) {
+        LookupElementBuilder builder = LookupElementBuilder.create(text)
+                .withPresentableText(text);
+        
+        // 根据类型设置不同的外观
+        if (type == SuggestionType.DIRECTORY) {
+            builder = builder
+                    .withIcon(AllIcons.Nodes.Folder)
+                    .withTypeText("Directory")
+                    .withItemTextForeground(JBColor.BLUE)
+                    .withInsertHandler((insertContext, item) -> {
+                        if (needsDot) {
+                            insertDotAndTriggerCompletion(insertContext, project);
+                        }
+                    });
+        } else if (type == SuggestionType.INTERFACE) {
+            builder = builder
+                    .withIcon(AllIcons.Nodes.Interface)
+                    .withTypeText("Interface")
+                    .withItemTextForeground(JBColor.MAGENTA)
+                    .withBoldness(true);
+        }
+        
+        return builder;
     }
 
     /**
