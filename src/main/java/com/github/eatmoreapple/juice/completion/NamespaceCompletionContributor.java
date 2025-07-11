@@ -238,16 +238,31 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
-     * 处理Go文件，提取所有类型
+     * 处理Go文件，仅提取接口类型
      */
     private void processGoFile(@NotNull GoFile goFile, @NotNull Set<String> suggestions) {
         for (GoTypeSpec typeSpec : goFile.getTypes()) {
-            // 添加所有类型，不再特定过滤接口
-            String typeName = typeSpec.getName();
-            if (typeName != null) {
-                suggestions.add(typeName);
+            // 通过检查是否有方法来判断是否为接口
+            if (isInterfaceType(typeSpec)) {
+                String typeName = typeSpec.getName();
+                if (typeName != null) {
+                    suggestions.add(typeName);
+                }
             }
         }
+    }
+
+    /**
+     * 判断是否为接口类型
+     */
+    private boolean isInterfaceType(@NotNull GoTypeSpec typeSpec) {
+        // 检查类型定义的文本内容，接口类型会包含 "interface" 关键字
+        String text = typeSpec.getText();
+        if (text == null) return false;
+        
+        // 简单的文本匹配，检查是否包含 "interface {" 模式
+        return text.contains("interface") && text.contains("{") && 
+               text.indexOf("interface") < text.indexOf("{");
     }
 
     /**
