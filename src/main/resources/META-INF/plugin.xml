@@ -27,6 +27,14 @@
                                   implementation="com.github.eatmoreapple.juice.reference.MapperResourceReferenceContributor"/>
         <annotator language="XML"
                    implementationClass="com.github.eatmoreapple.juice.annotator.MapperResourceAnnotator"/>
+        
+        <!-- Namespace验证 -->
+        <annotator language="XML"
+                   implementationClass="com.github.eatmoreapple.juice.annotator.NamespaceValidationAnnotator"/>
+        
+        <!-- SQL ID验证 -->
+        <annotator language="XML"
+                   implementationClass="com.github.eatmoreapple.juice.annotator.SqlIdValidationAnnotator"/>
 
         <!-- SQL语言注入 -->
         <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.SqlLanguageInjector"/>
