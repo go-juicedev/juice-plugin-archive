@@ -1,8 +1,8 @@
 package com.github.eatmoreapple.juice.marker;
 
+import com.github.eatmoreapple.juice.util.ModuleUtils;
 import com.goide.psi.GoMethodSpec;
 import com.goide.psi.GoSpecType;
-import com.goide.psi.impl.GoSpecTypeImpl;
 import com.goide.stubs.index.GoMethodSpecFingerprintIndex;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerProvider;
@@ -13,13 +13,12 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.stubs.StubIndex;
 import com.intellij.psi.xml.XmlTag;
-import com.github.eatmoreapple.juice.util.ModuleUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 
 /**
  * @author pjh
@@ -37,7 +36,7 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 String sqlId = xmlElement.getAttributeValue("id"); // 获取 SQL 方法 ID
                 if (sqlId != null) {
                     // 查找对应的 Go 方法
-                    PsiElement target = findGoMethodById(sqlId, xmlElement.getProject(), ((XmlTag) parent).getAttributeValue("namespace"));
+                    PsiElement target = findGoMethodById(sqlId, xmlElement.getProject(), parentXml.getAttributeValue("namespace"));
                     if (target != null) {
                         NavigationGutterIconBuilder<PsiElement> builder = NavigationGutterIconBuilder
                                 .create(AllIcons.Gutter.ImplementingMethod)
@@ -63,17 +62,18 @@ public class SqlIdLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
             // 搜索匹配的方法
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-            Collection<GoMethodSpec> matchedMethods = StubIndex.getElements(
-                    GoMethodSpecFingerprintIndex.KEY,
-                    StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project).stream()
-                            .filter(key -> key.split("/")[0].equals(id))
-                            .findFirst()
-                            .orElse(""),
-                    project,
-                    scope,
-                    GoMethodSpec.class
-            );
-
+            Collection<GoMethodSpec> matchedMethods = new ArrayList<>();
+            StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project).stream()
+                    .filter(key -> key.split("/")[0].equals(id))
+                    .forEach(key ->
+                            matchedMethods.addAll(StubIndex.getElements(
+                                    GoMethodSpecFingerprintIndex.KEY,
+                                    key,
+                                    project,
+                                    scope,
+                                    GoMethodSpec.class
+                            ))
+                    );
             // 过滤并返回匹配的方法
             return matchedMethods.stream()
                     .filter(method -> {
