@@ -1,28 +1,21 @@
 package com.github.eatmoreapple.juice.reference;
 
-import com.github.eatmoreapple.juice.marker.SqlIdLineMarkerProvider;
-import com.goide.psi.GoMethodSpec;
-import com.goide.psi.GoSpecType;
-import com.goide.stubs.index.GoMethodSpecFingerprintIndex;
+import com.github.eatmoreapple.juice.resolve.GoMethodResolver;
 import com.intellij.openapi.project.Project;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.patterns.XmlPatterns;
-import com.intellij.psi.*;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.stubs.StubIndex;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiReference;
+import com.intellij.psi.PsiReferenceBase;
+import com.intellij.psi.PsiReferenceContributor;
+import com.intellij.psi.PsiReferenceProvider;
+import com.intellij.psi.PsiReferenceRegistrar;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.github.eatmoreapple.juice.util.ModuleUtils;
-
-import java.util.Collection;
 
 public class SqlIdReferenceContributor extends PsiReferenceContributor {
-    private static final Logger log = LoggerFactory.getLogger(SqlIdLineMarkerProvider.class);
 
     @Override
     public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
@@ -36,9 +29,8 @@ public class SqlIdReferenceContributor extends PsiReferenceContributor {
                 new PsiReferenceProvider() {
                     @Override
                     public PsiReference @NotNull [] getReferencesByElement(@NotNull PsiElement element,
-                                                                         @NotNull ProcessingContext context) {
+                                                                           @NotNull ProcessingContext context) {
                         XmlAttributeValue value = (XmlAttributeValue) element;
-                        String id = value.getValue();
 
                         // 获取 mapper 标签
                         PsiElement current = value.getParent().getParent(); // 从属性值到标签
@@ -67,47 +59,9 @@ public class SqlIdReferenceContributor extends PsiReferenceContributor {
 
         @Override
         public PsiElement resolve() {
-            try {
-                String id = getElement().getValue();
-                Project project = getElement().getProject();
-
-                // 解析命名空间路径
-                String moduleName = ModuleUtils.getModuleName(project);
-                String interfacePath = namespace.substring(moduleName.length()).replace(".", "/");
-                String[] pathParts = interfacePath.split("/");
-                String interfaceName = pathParts[pathParts.length - 1];
-                String dirPath = interfacePath.substring(0, interfacePath.lastIndexOf("/"));
-                log.info("Interface path: {}, Interface name: {}", interfacePath, interfaceName);
-
-                // 搜索匹配的方法
-                GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-                Collection<GoMethodSpec> matchedMethods = StubIndex.getElements(
-                        GoMethodSpecFingerprintIndex.KEY,
-                        StubIndex.getInstance().getAllKeys(GoMethodSpecFingerprintIndex.KEY, project).stream()
-                                .filter(key -> key.split("/")[0].equals(id))
-                                .findFirst()
-                                .orElse(""),
-                        project,
-                        scope,
-                        GoMethodSpec.class
-                );
-
-                // 过滤并返回匹配的方法
-                return matchedMethods.stream()
-                        .filter(method -> {
-                            if (method.getParent().getContext() instanceof GoSpecType parent) {
-                                String methodInterfaceName = parent.getIdentifier().getText();
-                                String methodDirPath = parent.getContainingFile().getVirtualFile().getParent().getPath();
-                                return methodDirPath.endsWith(dirPath) && interfaceName.equals(methodInterfaceName);
-                            }
-                            return false;
-                        })
-                        .findFirst()
-                        .orElse(null);
-            } catch (Exception e) {
-                log.warn("Failed to resolve reference for id: {}", getElement().getValue(), e);
-                return null;
-            }
+            String id = getElement().getValue();
+            Project project = getElement().getProject();
+            return GoMethodResolver.resolveBySqlId(project, id, namespace);
         }
     }
 }
