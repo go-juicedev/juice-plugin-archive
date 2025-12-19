@@ -110,7 +110,8 @@ public class NamespaceValidationAnnotator implements Annotator {
         }
 
         // 检查格式
-        if (!namespace.startsWith(moduleName)) {
+        boolean isMainNamespace = namespace.startsWith("main.");
+        if (!isMainNamespace && !namespace.startsWith(moduleName)) {
             addInvalidFormatError(holder, value, moduleName);
             return;
         }

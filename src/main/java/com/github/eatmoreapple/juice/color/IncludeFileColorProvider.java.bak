@@ -1,0 +1,66 @@
+package com.github.eatmoreapple.juice.color;
+
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
+import com.intellij.psi.search.FilenameIndex;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.xml.XmlFile;
+import com.intellij.psi.xml.XmlTag;
+import com.intellij.ui.FileColorProvider;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.awt.*;
+
+public class IncludeFileColorProvider implements FileColorProvider {
+    
+    private static final Color MAPPER_RESOURCE_COLOR = new Color(0xE6F3FF); // 淡蓝色，类似Spring
+    
+    @Override
+    public @Nullable Color getFileColor(@NotNull Project project, @NotNull VirtualFile file) {
+        if (!file.getName().endsWith(".xml")) {
+            return null;
+        }
+        
+        // 检查这个XML文件是否被mappers配置中的resource属性引用
+        if (isMapperResourceFile(project, file)) {
+            return MAPPER_RESOURCE_COLOR;
+        }
+        
+        return null;
+    }
+    
+    private boolean isMapperResourceFile(@NotNull Project project, @NotNull VirtualFile file) {
+        String fileName = file.getName();
+        
+        // 搜索项目中所有的XML文件
+        PsiFile[] allXmlFiles = FilenameIndex.getFilesByName(project, "*.xml", GlobalSearchScope.projectScope(project));
+        
+        for (PsiFile xmlFile : allXmlFiles) {
+            if (!(xmlFile instanceof XmlFile)) {
+                continue;
+            }
+            
+            XmlFile xml = (XmlFile) xmlFile;
+            XmlTag rootTag = xml.getRootTag();
+            if (rootTag == null) {
+                continue;
+            }
+            
+            // 检查是否是mappers配置文件
+            if ("mappers".equals(rootTag.getName())) {
+                XmlTag[] mapperTags = rootTag.findSubTags("mapper");
+                for (XmlTag mapperTag : mapperTags) {
+                    String resource = mapperTag.getAttributeValue("resource");
+                    if (resource != null && resource.endsWith(fileName)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+}

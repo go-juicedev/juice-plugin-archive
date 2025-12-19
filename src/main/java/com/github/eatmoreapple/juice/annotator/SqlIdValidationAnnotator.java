@@ -1,5 +1,6 @@
 package com.github.eatmoreapple.juice.annotator;
 
+import com.goide.psi.GoFile;
 import com.goide.psi.GoTypeSpec;
 import com.goide.stubs.index.GoTypesIndex;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
@@ -140,25 +141,32 @@ public class SqlIdValidationAnnotator implements Annotator {
      */
     private boolean methodExists(@NotNull Project project, @NotNull String namespace, @NotNull String methodName) {
         try {
-            // 获取模块名
-            String moduleName = ModuleUtils.getModuleName(project);
-            if (moduleName == null) {
-                return false;
-            }
-
-            // 解析namespace
+            boolean isMainNamespace = namespace.startsWith("main.");
             String relativeNamespace = namespace;
-            if (namespace.startsWith(moduleName)) {
-                relativeNamespace = namespace.substring(moduleName.length() + 1);
-            }
+            String packagePath;
+            String interfaceName;
 
-            String[] parts = relativeNamespace.split("\\.");
-            if (parts.length < 2) {
-                return false;
-            }
+            if (isMainNamespace) {
+                // main.UserMapper -> packagePath = "main", interfaceName = "UserMapper"
+                packagePath = "main";
+                interfaceName = namespace.substring(5).trim();
+            } else {
+                // 获取模块名
+                String moduleName = ModuleUtils.getModuleName(project);
+                if (moduleName == null) {
+                    return false;
+                }
 
-            String packagePath = parts[parts.length - 2];
-            String interfaceName = parts[parts.length - 1];
+                if (namespace.startsWith(moduleName)) {
+                    relativeNamespace = namespace.substring(moduleName.length() + 1);
+                }
+                String[] parts = relativeNamespace.split("\\.");
+                if (parts.length < 2) {
+                    return false;
+                }
+                packagePath = parts[parts.length - 2];
+                interfaceName = parts[parts.length - 1].trim();
+            }
 
             // 查找接口
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
@@ -168,6 +176,9 @@ public class SqlIdValidationAnnotator implements Annotator {
             return elements.stream()
                     .filter(element -> {
                         String elementPackagePath = element.getContainingFile().getPackageName();
+                        if (isMainNamespace) {
+                            return "main".equals(elementPackagePath);
+                        }
                         return elementPackagePath.endsWith(packagePath);
                     })
                     .anyMatch(element -> element.getAllMethods().stream()
@@ -212,23 +223,31 @@ public class SqlIdValidationAnnotator implements Annotator {
      */
     private List<String> findSimilarMethods(@NotNull Project project, @NotNull String namespace, @NotNull String methodName) {
         try {
-            String moduleName = ModuleUtils.getModuleName(project);
-            if (moduleName == null) {
-                return List.of();
-            }
-
+            boolean isMainNamespace = namespace.startsWith("main.");
             String relativeNamespace = namespace;
-            if (namespace.startsWith(moduleName)) {
-                relativeNamespace = namespace.substring(moduleName.length() + 1);
-            }
+            String packagePath;
+            String interfaceName;
 
-            String[] parts = relativeNamespace.split("\\.");
-            if (parts.length < 2) {
-                return List.of();
-            }
+            if (isMainNamespace) {
+                packagePath = "main";
+                interfaceName = namespace.substring(5).trim();
+            } else {
+                // 获取模块名
+                String moduleName = ModuleUtils.getModuleName(project);
+                if (moduleName == null) {
+                    return List.of();
+                }
 
-            String packagePath = parts[parts.length - 2];
-            String interfaceName = parts[parts.length - 1];
+                if (namespace.startsWith(moduleName)) {
+                    relativeNamespace = namespace.substring(moduleName.length() + 1);
+                }
+                String[] parts = relativeNamespace.split("\\.");
+                if (parts.length < 2) {
+                    return List.of();
+                }
+                packagePath = parts[parts.length - 2];
+                interfaceName = parts[parts.length - 1].trim();
+            }
 
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
             Collection<GoTypeSpec> elements = StubIndex.getElements(
@@ -237,6 +256,9 @@ public class SqlIdValidationAnnotator implements Annotator {
             return elements.stream()
                     .filter(element -> {
                         String elementPackagePath = element.getContainingFile().getPackageName();
+                        if (isMainNamespace) {
+                            return "main".equals(elementPackagePath);
+                        }
                         return elementPackagePath.endsWith(packagePath);
                     })
                     .flatMap(element -> element.getAllMethods().stream())

@@ -50,19 +50,18 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             PsiElement position = parameters.getPosition();
                             Project project = position.getProject();
                             
-                            // 获取模块名
-                            String moduleName = ModuleUtils.getModuleName(project);
-                            if (moduleName == null) {
-                                LOG.debug("Module name is null, skipping namespace completion");
-                                return;
-                            }
-
                             // 处理当前输入文本
                             String currentText = cleanInputText(position.getText());
 
+                            // 获取模块名
+                            String moduleName = ModuleUtils.getModuleName(project);
+                            
                             // 处理空输入或只有点号的情况
                             if (currentText.isEmpty() || DOT.equals(currentText)) {
-                                addModuleNameCompletion(result, parameters, moduleName, project);
+                                if (moduleName != null) {
+                                    addModuleNameCompletion(result, moduleName, project, "Module");
+                                }
+                                addModuleNameCompletion(result, "main", project, "Package");
                                 return;
                             }
 
@@ -76,7 +75,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             Set<CompletionSuggestion> suggestions = collectSuggestions(project, currentDir);
 
                             // 添加补全建议
-                            addSuggestionsToResult(result, suggestions, currentText, project);
+                            addSuggestionsToResult(result, suggestions, project);
                         } catch (Exception e) {
                             LOG.warn("Error in namespace completion", e);
                         }
@@ -97,21 +96,17 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
-     * 添加模块名补全
+     * 添加模块名或 main 包补全
      */
     private void addModuleNameCompletion(@NotNull CompletionResultSet result, 
-                                       @NotNull CompletionParameters parameters, 
-                                       @NotNull String moduleName,
-                                       @NotNull Project project) {
-        result.addElement(LookupElementBuilder.create(moduleName)
-                .withPresentableText(moduleName)
-                .withTypeText("Module")
+                                       @NotNull String name,
+                                       @NotNull Project project,
+                                       @NotNull String typeText) {
+        result.addElement(LookupElementBuilder.create(name)
+                .withPresentableText(name)
+                .withTypeText(typeText)
                 .withInsertHandler((insertContext, item) -> {
-                    // 处理点号开头的情况
-                    handleLeadingDot(insertContext, parameters);
-                    
-                    // 自动触发下一级补全
-                    triggerNextLevelCompletion(insertContext, project);
+                    insertDotAndTriggerCompletion(insertContext, project);
                 }));
     }
 
@@ -152,8 +147,8 @@ public class NamespaceCompletionContributor extends CompletionContributor {
             return null;
         }
 
-        // 去掉模块名部分
-        String remainingPath = stripModuleName(currentText, moduleName);
+        // 去掉模块名或 main 部分
+        String remainingPath = stripPrefix(currentText, moduleName);
         if (remainingPath.isEmpty()) {
             return baseDir;
         }
@@ -163,11 +158,15 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
-     * 去除模块名前缀
+     * 去除前缀（模块名或 main）
      */
     @NotNull
-    private String stripModuleName(@NotNull String path, @NotNull String moduleName) {
-        if (path.startsWith(moduleName)) {
+    private String stripPrefix(@NotNull String path, @Nullable String moduleName) {
+        if (path.startsWith("main")) {
+            String remaining = path.substring(4);
+            return remaining.startsWith(DOT) ? remaining.substring(1) : remaining;
+        }
+        if (moduleName != null && path.startsWith(moduleName)) {
             String remaining = path.substring(moduleName.length());
             return remaining.startsWith(DOT) ? remaining.substring(1) : remaining;
         }
@@ -308,10 +307,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      */
     private void addSuggestionsToResult(@NotNull CompletionResultSet result, 
                                       @NotNull Set<CompletionSuggestion> suggestions, 
-                                      @NotNull String currentText,
                                       @NotNull Project project) {
-        boolean needsDot = !currentText.endsWith(DOT);
-        
         for (CompletionSuggestion suggestion : suggestions) {
             String name = suggestion.getName();
             SuggestionType type = suggestion.getType();
@@ -319,7 +315,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
             String[] parts = name.split("\\.");
             String lastPart = parts[parts.length - 1];
             
-            LookupElement element = createLookupElement(lastPart, type, needsDot, project);
+            LookupElement element = createLookupElement(lastPart, type, project);
             result.addElement(element);
         }
     }
@@ -329,7 +325,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      */
     @NotNull
     private LookupElement createLookupElement(@NotNull String text, @NotNull SuggestionType type, 
-                                            boolean needsDot, @NotNull Project project) {
+                                            @NotNull Project project) {
         LookupElementBuilder builder = LookupElementBuilder.create(text)
                 .withPresentableText(text);
         
@@ -340,9 +336,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                     .withTypeText("Directory")
                     .withItemTextForeground(JBColor.BLUE)
                     .withInsertHandler((insertContext, item) -> {
-                        if (needsDot) {
-                            insertDotAndTriggerCompletion(insertContext, project);
-                        }
+                        insertDotAndTriggerCompletion(insertContext, project);
                     });
         } else if (type == SuggestionType.INTERFACE) {
             builder = builder
@@ -361,11 +355,38 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     private void insertDotAndTriggerCompletion(@NotNull InsertionContext insertContext, @NotNull Project project) {
         Editor editor = insertContext.getEditor();
         Document document = editor.getDocument();
-        document.insertString(insertContext.getTailOffset(), DOT);
-        editor.getCaretModel().moveToOffset(insertContext.getTailOffset());
         
-        new CodeCompletionHandlerBase(CompletionType.BASIC)
-            .invokeCompletion(project, editor);
+        // 1. 处理前导点号：如果用户输入以点号开头，补全后删除它
+        int startOffset = insertContext.getStartOffset();
+        if (startOffset > 0 && document.getCharsSequence().charAt(startOffset - 1) == '.') {
+            document.deleteString(startOffset - 1, startOffset);
+        }
+
+        // 2. 处理尾部点号
+        int tailOffset = insertContext.getTailOffset();
+        
+        // 检查当前位置后面是否已经有点号
+        boolean alreadyHasDot = false;
+        if (tailOffset < document.getTextLength()) {
+            char nextChar = document.getCharsSequence().charAt(tailOffset);
+            if (nextChar == '.') {
+                alreadyHasDot = true;
+            }
+        }
+        
+        if (!alreadyHasDot) {
+            document.insertString(tailOffset, DOT);
+            editor.getCaretModel().moveToOffset(tailOffset + 1);
+        } else {
+            // 如果已经有点号，只需移动光标到点号后面
+            editor.getCaretModel().moveToOffset(tailOffset + 1);
+        }
+        
+        // 自动触发下次补全
+        insertContext.setLaterRunnable(() -> {
+            new CodeCompletionHandlerBase(CompletionType.BASIC)
+                .invokeCompletion(project, editor);
+        });
     }
 
     /**

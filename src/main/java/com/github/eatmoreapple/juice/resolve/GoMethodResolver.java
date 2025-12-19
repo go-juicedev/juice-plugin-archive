@@ -1,6 +1,7 @@
 package com.github.eatmoreapple.juice.resolve;
 
 import com.github.eatmoreapple.juice.util.ModuleUtils;
+import com.goide.psi.GoFile;
 import com.goide.psi.GoMethodSpec;
 import com.goide.psi.GoSpecType;
 import com.goide.stubs.index.GoMethodSpecFingerprintIndex;
@@ -29,12 +30,25 @@ public class GoMethodResolver {
     public static PsiElement resolveBySqlId(Project project, String id, String namespace) {
         try {
             // 解析命名空间路径
-            String moduleName = ModuleUtils.getModuleName(project);
-            String interfacePath = namespace.substring(moduleName.length()).replace(".", "/");
+            boolean isMainNamespace = namespace.startsWith("main.");
+            String interfacePath;
+            String moduleName = "";
+            if (isMainNamespace) {
+                interfacePath = namespace.replace(".", "/");
+            } else {
+                moduleName = ModuleUtils.getModuleName(project);
+                if (moduleName == null || !namespace.startsWith(moduleName)) {
+                    return null;
+                }
+                interfacePath = namespace.substring(moduleName.length()).replace(".", "/");
+                if (interfacePath.startsWith("/")) {
+                    interfacePath = interfacePath.substring(1);
+                }
+            }
+
             String[] pathParts = interfacePath.split("/");
             String interfaceName = pathParts[pathParts.length - 1];
-            String dirPath = interfacePath.substring(0, interfacePath.lastIndexOf("/"));
-            log.info("Interface path: {}, Interface name: {}", interfacePath, interfaceName);
+            String dirPath = interfacePath.contains("/") ? interfacePath.substring(0, interfacePath.lastIndexOf("/")) : "";
 
             // 搜索匹配的方法
             GlobalSearchScope scope = GlobalSearchScope.allScope(project);
@@ -55,8 +69,20 @@ public class GoMethodResolver {
                     .filter(method -> {
                         if (method.getParent().getContext() instanceof GoSpecType parent) {
                             String methodInterfaceName = parent.getIdentifier().getText();
-                            String methodDirPath = parent.getContainingFile().getVirtualFile().getParent().getPath();
-                            return methodDirPath.endsWith(dirPath) && interfaceName.equals(methodInterfaceName);
+                            if (!interfaceName.equals(methodInterfaceName)) {
+                                return false;
+                            }
+                            if (isMainNamespace) {
+                                // 对于 main 包，直接校验包名
+                                if (parent.getContainingFile() instanceof GoFile goFile) {
+                                    return "main".equals(goFile.getPackageName());
+                                }
+                                return false;
+                            } else {
+                                // 对于非 main 包，校验目录路径
+                                String methodDirPath = parent.getContainingFile().getVirtualFile().getParent().getPath();
+                                return methodDirPath.endsWith(dirPath);
+                            }
                         }
                         return false;
                     })
