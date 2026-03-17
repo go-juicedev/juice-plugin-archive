@@ -12,6 +12,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * SQL 语言注入器
@@ -20,7 +22,7 @@ import java.util.Set;
 public class SqlLanguageInjector implements MultiHostInjector {
     // SQL 标签集合
     private static final Set<String> SQL_TAGS = Set.of("insert", "select", "update", "delete", "sql");
-    
+    private static final Pattern PARAM_PATTERN = Pattern.compile("#\\{([^}]+)\\}|\\$\\{([^}]+)\\}");
     private static final Language SQL_LANGUAGE = Language.findLanguageByID("SQL");
 
     @Override
@@ -45,14 +47,65 @@ public class SqlLanguageInjector implements MultiHostInjector {
             return;
         }
 
-        // 注入 SQL 语言
         if (SQL_LANGUAGE != null) {
-            registrar
-                .startInjecting(SQL_LANGUAGE)
-                .addPlace(null, null, (PsiLanguageInjectionHost) context, 
-                         new TextRange(0, text.length()))
-                .doneInjecting();
+            injectSqlAroundParams(registrar, (PsiLanguageInjectionHost) context, text);
         }
+    }
+
+    private void injectSqlAroundParams(@NotNull MultiHostRegistrar registrar,
+                                       @NotNull PsiLanguageInjectionHost host,
+                                       @NotNull String text) {
+        Matcher matcher = PARAM_PATTERN.matcher(text);
+        int lastOffset = 0;
+        boolean hasParam = false;
+        boolean started = false;
+        String pendingPrefix = null;
+
+        while (matcher.find()) {
+            hasParam = true;
+            String replacement = sqlReplacementForParam(matcher.group());
+            if (lastOffset < matcher.start()) {
+                if (!started) {
+                    registrar.startInjecting(SQL_LANGUAGE);
+                    started = true;
+                }
+                registrar.addPlace(pendingPrefix, replacement, host, new TextRange(lastOffset, matcher.start()));
+                pendingPrefix = null;
+            } else {
+                pendingPrefix = appendReplacement(pendingPrefix, replacement);
+            }
+            lastOffset = matcher.end();
+        }
+
+        if (lastOffset < text.length()) {
+            if (!started) {
+                registrar.startInjecting(SQL_LANGUAGE);
+                started = true;
+            }
+            registrar.addPlace(pendingPrefix, null, host, new TextRange(lastOffset, text.length()));
+        } else if (!started && !hasParam) {
+            registrar.startInjecting(SQL_LANGUAGE);
+            registrar.addPlace(null, null, host, new TextRange(0, text.length()));
+            started = true;
+        }
+
+        if (started) {
+            registrar.doneInjecting();
+        }
+    }
+
+    private String sqlReplacementForParam(@NotNull String placeholder) {
+        if (placeholder.startsWith("#{")) {
+            return " ? ";
+        }
+        return " juice_param ";
+    }
+
+    private String appendReplacement(String existing, String replacement) {
+        if (existing == null || existing.isEmpty()) {
+            return replacement;
+        }
+        return existing + replacement;
     }
 
     /**

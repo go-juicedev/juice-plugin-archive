@@ -56,15 +56,10 @@
         <completion.contributor language="XML"
                               implementationClass="com.github.eatmoreapple.juice.completion.NamespaceCompletionContributor"/>
                               
-        <!--        &lt;!&ndash; 参数语言注入 &ndash;&gt;-->
-        <!--        <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.MapperParamLanguageInjector"/>-->
-        <!--        -->
-        <!--        &lt;!&ndash; 参数语法高亮 &ndash;&gt;-->
-        <!--        <lang.syntaxHighlighter language="MapperParam" -->
-        <!--            implementationClass="com.github.eatmoreapple.juice.highlight.MapperParamSyntaxHighlighter"/>-->
-        <!--        -->
-        <!--        &lt;!&ndash; 参数高亮 &ndash;&gt;-->
-        <!--        <annotator language="MapperParam"-->
-        <!--                  implementationClass="com.github.eatmoreapple.juice.annotator.MapperParamAnnotator"/>-->
+        <multiHostInjector implementation="com.github.eatmoreapple.juice.injection.MapperParamLanguageInjector"/>
+        <lang.syntaxHighlighterFactory language="MapperParam"
+                                       implementationClass="com.github.eatmoreapple.juice.highlight.MapperParamSyntaxHighlighterFactory"/>
+        <lang.parserDefinition language="MapperParam"
+                               implementationClass="com.github.eatmoreapple.juice.lang.MapperParamParserDefinition"/>
     </extensions>
 </idea-plugin>
