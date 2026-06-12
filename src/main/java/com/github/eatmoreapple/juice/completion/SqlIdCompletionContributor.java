@@ -1,8 +1,6 @@
 package com.github.eatmoreapple.juice.completion;
 
-import com.goide.psi.GoTypeSpec;
 import com.goide.psi.GoNamedSignatureOwner;
-import com.goide.stubs.index.GoTypesIndex;
 import com.intellij.codeInsight.completion.CompletionContributor;
 import com.intellij.codeInsight.completion.CompletionParameters;
 import com.intellij.codeInsight.completion.CompletionProvider;
@@ -15,8 +13,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.patterns.XmlPatterns;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.stubs.StubIndex;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.ui.JBColor;
@@ -29,7 +25,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.github.eatmoreapple.juice.util.ModuleUtils;
+import com.github.eatmoreapple.juice.resolve.MapperNamespaceResolver;
 
 /**
  * @author pjh
@@ -85,38 +81,14 @@ public class SqlIdCompletionContributor extends CompletionContributor {
                                 return;
                             }
 
-                            // 获取当前项目的 module name
-                            String moduleName = ModuleUtils.getModuleName(position.getProject());
-                            if (moduleName == null) {
+                            MapperNamespaceResolver.ResolvedNamespace resolvedNamespace =
+                                    MapperNamespaceResolver.parse(position.getProject(), namespace);
+                            if (resolvedNamespace == null) {
                                 return;
                             }
 
-                            // 去掉 namespace 中的 module name 前缀
-                            String relativeNamespace = namespace;
-                            if (namespace.startsWith(moduleName)) {
-                                relativeNamespace = namespace.substring(moduleName.length() + 1); // 去掉前缀和后面的 "."
-                            }
-
-                            // 解析 relativeNamespace 获取包路径和接口名
-                            String[] parts = relativeNamespace.split("\\.");
-                            if (parts.length < 2) {
-                                return; // 格式不正确
-                            }
-                            String packagePath = parts[parts.length - 2]; // 包路径
-                            String interfaceName = parts[parts.length - 1]; // 接口名
-
-                            // 查找匹配的 GoTypeSpec
-                            GlobalSearchScope globalSearchScope = GlobalSearchScope.allScope(position.getProject());
-                            Collection<GoTypeSpec> elements = StubIndex.getElements(
-                                    GoTypesIndex.KEY, interfaceName, position.getProject(), globalSearchScope, GoTypeSpec.class);
-
                             // 过滤出包路径和接口名匹配的 GoTypeSpec，并收集方法信息
-                            List<MethodInfo> methods = elements.stream()
-                                    .filter(element -> {
-                                        // 检查包路径是否匹配
-                                        String elementPackagePath = element.getContainingFile().getPackageName();
-                                        return elementPackagePath.endsWith(packagePath); // 检查包路径是否以目标包路径结尾
-                                    })
+                            List<MethodInfo> methods = MapperNamespaceResolver.findTypes(position.getProject(), resolvedNamespace, true).stream()
                                     .flatMap(element -> element.getAllMethods().stream()
                                             .map(method -> new MethodInfo(
                                                     method.getIdentifier().getText(),

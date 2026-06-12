@@ -3,6 +3,7 @@ package com.github.eatmoreapple.juice.injection;
 import com.github.eatmoreapple.juice.lang.MapperParamLanguage;
 import com.intellij.lang.injection.MultiHostInjector;
 import com.intellij.lang.injection.MultiHostRegistrar;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiLanguageInjectionHost;
@@ -12,12 +13,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MapperParamLanguageInjector implements MultiHostInjector {
+    private static final Logger LOG = Logger.getInstance(MapperParamLanguageInjector.class);
+    private static final boolean DEBUG = Boolean.getBoolean("juice.debug.injection");
     private static final Set<String> SQL_TAGS = Set.of("insert", "select", "update", "delete", "sql");
-    private static final Pattern PARAM_PATTERN = Pattern.compile("#\\{([^}]+)\\}|\\$\\{([^}]+)\\}");
 
     @Override
     public void getLanguagesToInject(@NotNull MultiHostRegistrar registrar, @NotNull PsiElement context) {
@@ -34,17 +34,18 @@ public class MapperParamLanguageInjector implements MultiHostInjector {
             return;
         }
 
-        Matcher matcher = PARAM_PATTERN.matcher(text);
+        List<TextRange> ranges = MapperParamSupport.findParamRanges(text);
         boolean started = false;
-        while (matcher.find()) {
+        for (TextRange range : ranges) {
             if (!started) {
                 registrar.startInjecting(MapperParamLanguage.INSTANCE);
                 started = true;
             }
-            registrar.addPlace(null, null, (PsiLanguageInjectionHost) context, new TextRange(matcher.start(), matcher.end()));
+            registrar.addPlace(null, null, (PsiLanguageInjectionHost) context, range);
         }
         if (started) {
             registrar.doneInjecting();
+            debug("Injected MapperParam into " + ranges.size() + " range(s): " + summarize(text));
         }
     }
 
@@ -62,5 +63,19 @@ public class MapperParamLanguageInjector implements MultiHostInjector {
             currentTag = currentTag.getParentTag();
         }
         return false;
+    }
+
+    private void debug(@NotNull String message) {
+        if (DEBUG) {
+            LOG.warn(message);
+        }
+    }
+
+    private @NotNull String summarize(@NotNull String text) {
+        String normalized = text.replace('\n', ' ').trim();
+        if (normalized.length() <= 120) {
+            return normalized;
+        }
+        return normalized.substring(0, 117) + "...";
     }
 }

@@ -3,6 +3,7 @@ package com.github.eatmoreapple.juice.injection;
 import com.intellij.lang.Language;
 import com.intellij.lang.injection.MultiHostInjector;
 import com.intellij.lang.injection.MultiHostRegistrar;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiLanguageInjectionHost;
@@ -12,17 +13,16 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * SQL 语言注入器
  * 在 MyBatis XML 文件中的 SQL 标签内注入 SQL 语言
  */
 public class SqlLanguageInjector implements MultiHostInjector {
+    private static final Logger LOG = Logger.getInstance(SqlLanguageInjector.class);
+    private static final boolean DEBUG = Boolean.getBoolean("juice.debug.injection");
     // SQL 标签集合
     private static final Set<String> SQL_TAGS = Set.of("insert", "select", "update", "delete", "sql");
-    private static final Pattern PARAM_PATTERN = Pattern.compile("#\\{([^}]+)\\}|\\$\\{([^}]+)\\}");
     private static final Language SQL_LANGUAGE = Language.findLanguageByID("SQL");
 
     @Override
@@ -55,57 +55,23 @@ public class SqlLanguageInjector implements MultiHostInjector {
     private void injectSqlAroundParams(@NotNull MultiHostRegistrar registrar,
                                        @NotNull PsiLanguageInjectionHost host,
                                        @NotNull String text) {
-        Matcher matcher = PARAM_PATTERN.matcher(text);
-        int lastOffset = 0;
-        boolean hasParam = false;
+        List<MapperParamSupport.SqlFragment> fragments = MapperParamSupport.buildSqlFragments(text);
         boolean started = false;
-        String pendingPrefix = null;
-
-        while (matcher.find()) {
-            hasParam = true;
-            String replacement = sqlReplacementForParam(matcher.group());
-            if (lastOffset < matcher.start()) {
-                if (!started) {
-                    registrar.startInjecting(SQL_LANGUAGE);
-                    started = true;
-                }
-                registrar.addPlace(pendingPrefix, replacement, host, new TextRange(lastOffset, matcher.start()));
-                pendingPrefix = null;
-            } else {
-                pendingPrefix = appendReplacement(pendingPrefix, replacement);
+        for (MapperParamSupport.SqlFragment fragment : fragments) {
+            if (fragment.range().isEmpty()) {
+                continue;
             }
-            lastOffset = matcher.end();
-        }
-
-        if (lastOffset < text.length()) {
             if (!started) {
                 registrar.startInjecting(SQL_LANGUAGE);
                 started = true;
             }
-            registrar.addPlace(pendingPrefix, null, host, new TextRange(lastOffset, text.length()));
-        } else if (!started && !hasParam) {
-            registrar.startInjecting(SQL_LANGUAGE);
-            registrar.addPlace(null, null, host, new TextRange(0, text.length()));
-            started = true;
+            registrar.addPlace(fragment.prefix(), fragment.suffix(), host, fragment.range());
         }
 
         if (started) {
             registrar.doneInjecting();
+            debug("Injected SQL into " + fragments.size() + " fragment(s): " + summarize(text));
         }
-    }
-
-    private String sqlReplacementForParam(@NotNull String placeholder) {
-        if (placeholder.startsWith("#{")) {
-            return " ? ";
-        }
-        return " juice_param ";
-    }
-
-    private String appendReplacement(String existing, String replacement) {
-        if (existing == null || existing.isEmpty()) {
-            return replacement;
-        }
-        return existing + replacement;
     }
 
     /**
@@ -160,6 +126,20 @@ public class SqlLanguageInjector implements MultiHostInjector {
             currentTag = currentTag.getParentTag();
         }
         return false;
+    }
+
+    private void debug(@NotNull String message) {
+        if (DEBUG) {
+            LOG.warn(message);
+        }
+    }
+
+    private @NotNull String summarize(@NotNull String text) {
+        String normalized = text.replace('\n', ' ').trim();
+        if (normalized.length() <= 120) {
+            return normalized;
+        }
+        return normalized.substring(0, 117) + "...";
     }
 
     @Override

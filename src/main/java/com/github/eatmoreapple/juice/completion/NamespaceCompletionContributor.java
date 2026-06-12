@@ -2,6 +2,7 @@ package com.github.eatmoreapple.juice.completion;
 
 import com.goide.psi.GoFile;
 import com.goide.psi.GoTypeSpec;
+import com.goide.stubs.index.GoTypesIndex;
 import com.intellij.codeInsight.completion.*;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
@@ -9,6 +10,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.JBColor;
 import com.intellij.icons.AllIcons;
@@ -17,6 +19,10 @@ import com.intellij.patterns.XmlPatterns;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.stubs.StubIndex;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.util.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,6 +40,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     private static final Logger LOG = Logger.getInstance(NamespaceCompletionContributor.class);
     private static final Pattern INTELLIJ_MARKER_PATTERN = Pattern.compile("IntellijIdeaRulezzz");
     private static final String DOT = ".";
+    private static final String MAIN_PACKAGE = "main";
 
     public NamespaceCompletionContributor() {
         // 为 mapper 标签的 namespace 属性添加补全
@@ -51,31 +58,32 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                             Project project = position.getProject();
                             
                             // 处理当前输入文本
-                            String currentText = cleanInputText(position.getText());
+                            String currentText = getCurrentNamespacePrefix(parameters);
 
                             // 获取模块名
                             String moduleName = ModuleUtils.getModuleName(project);
                             
                             // 处理空输入或只有点号的情况
                             if (currentText.isEmpty() || DOT.equals(currentText)) {
-                                if (moduleName != null) {
-                                    addModuleNameCompletion(result, moduleName, project, "Module");
-                                }
-                                addModuleNameCompletion(result, "main", project, "Package");
+                                addNamespaceRootCompletions(result, moduleName, project, "");
                                 return;
                             }
 
-                            // 解析路径并获取当前目录
-                            VirtualFile currentDir = resolveDirectory(project, moduleName, currentText);
-                            if (currentDir == null) {
+                            CompletionContext completionContext = parseCompletionContext(currentText, moduleName);
+                            if (completionContext == null) {
+                                addNamespaceRootCompletions(result, moduleName, project, currentText);
                                 return;
                             }
 
                             // 收集补全建议
-                            Set<CompletionSuggestion> suggestions = collectSuggestions(project, currentDir);
+                            Set<CompletionSuggestion> suggestions = collectSuggestions(project, completionContext);
 
                             // 添加补全建议
-                            addSuggestionsToResult(result, suggestions, project);
+                            addSuggestionsToResult(
+                                    result.withPrefixMatcher(completionContext.currentSegment()),
+                                    suggestions,
+                                    project,
+                                    completionContext.insertLeadingDot());
                         } catch (Exception e) {
                             LOG.warn("Error in namespace completion", e);
                         }
@@ -96,6 +104,45 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
+     * 获取 namespace 属性中光标前的文本。
+     */
+    @NotNull
+    private String getCurrentNamespacePrefix(@NotNull CompletionParameters parameters) {
+        PsiElement position = parameters.getPosition();
+        XmlAttributeValue value = PsiTreeUtil.getParentOfType(position, XmlAttributeValue.class, false);
+        if (value == null && parameters.getOriginalPosition() != null) {
+            value = PsiTreeUtil.getParentOfType(parameters.getOriginalPosition(), XmlAttributeValue.class, false);
+        }
+        if (value == null) {
+            return cleanInputText(position.getText());
+        }
+
+        TextRange valueRange = value.getValueTextRange();
+        int valueStart = valueRange.getStartOffset();
+        int caretOffset = Math.max(valueStart, Math.min(parameters.getOffset(), valueRange.getEndOffset()));
+        Document document = parameters.getEditor().getDocument();
+        if (caretOffset <= document.getTextLength()) {
+            return cleanInputText(document.getText(TextRange.create(valueStart, caretOffset)));
+        }
+
+        return cleanInputText(value.getValue());
+    }
+
+    /**
+     * 添加 namespace 根节点补全。
+     */
+    private void addNamespaceRootCompletions(@NotNull CompletionResultSet result,
+                                             @Nullable String moduleName,
+                                             @NotNull Project project,
+                                             @NotNull String prefix) {
+        CompletionResultSet prefixedResult = result.withPrefixMatcher(prefix);
+        if (moduleName != null) {
+            addModuleNameCompletion(prefixedResult, moduleName, project, "Module");
+        }
+        addModuleNameCompletion(prefixedResult, MAIN_PACKAGE, project, "Package");
+    }
+
+    /**
      * 添加模块名或 main 包补全
      */
     private void addModuleNameCompletion(@NotNull CompletionResultSet result, 
@@ -111,66 +158,65 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
-     * 处理输入文本开头的点号
+     * 解析 namespace 补全上下文。
      */
-    private void handleLeadingDot(@NotNull InsertionContext insertContext, @NotNull CompletionParameters parameters) {
-        if (parameters.getPosition().getText().startsWith(DOT)) {
-            Editor editor = insertContext.getEditor();
-            Document document = editor.getDocument();
-            int startOffset = insertContext.getStartOffset() - 1;
-            if (startOffset >= 0) {
-                document.deleteString(startOffset, startOffset + 1);
-            }
+    @Nullable
+    private CompletionContext parseCompletionContext(@NotNull String currentText, @Nullable String moduleName) {
+        if (currentText.startsWith(MAIN_PACKAGE + DOT)) {
+            String remainder = currentText.substring((MAIN_PACKAGE + DOT).length());
+            return CompletionContext.main(currentSegment(remainder), false);
         }
+
+        if (currentText.equals(MAIN_PACKAGE)) {
+            return CompletionContext.main("", true);
+        }
+
+        if (moduleName == null) {
+            return null;
+        }
+
+        if (currentText.equals(moduleName)) {
+            return CompletionContext.module("", "", true);
+        }
+
+        if (!currentText.startsWith(moduleName + DOT)) {
+            return null;
+        }
+
+        String remainder = currentText.substring((moduleName + DOT).length());
+        int lastDot = remainder.lastIndexOf(DOT);
+        if (lastDot < 0) {
+            return CompletionContext.module("", remainder, false);
+        }
+
+        return CompletionContext.module(
+                remainder.substring(0, lastDot).replace('.', '/'),
+                remainder.substring(lastDot + 1),
+                false);
     }
 
-    /**
-     * 触发下一级补全
-     */
-    private void triggerNextLevelCompletion(@NotNull InsertionContext insertContext, @NotNull Project project) {
-        insertContext.setLaterRunnable(() -> {
-            Editor editor = insertContext.getEditor();
-            new CodeCompletionHandlerBase(CompletionType.BASIC)
-                .invokeCompletion(project, editor);
-            editor.getCaretModel().moveToOffset(editor.getCaretModel().getOffset());
-        });
+    @NotNull
+    private String currentSegment(@NotNull String path) {
+        int lastDot = path.lastIndexOf(DOT);
+        return lastDot < 0 ? path : path.substring(lastDot + 1);
     }
 
     /**
      * 解析目录路径
      */
     @Nullable
-    private VirtualFile resolveDirectory(@NotNull Project project, @NotNull String moduleName, @NotNull String currentText) {
+    private VirtualFile resolveDirectory(@NotNull Project project, @NotNull String relativeDirPath) {
         // 获取项目根目录
         VirtualFile baseDir = project.getBaseDir();
         if (baseDir == null) {
             return null;
         }
 
-        // 去掉模块名或 main 部分
-        String remainingPath = stripPrefix(currentText, moduleName);
-        if (remainingPath.isEmpty()) {
+        if (relativeDirPath.isEmpty()) {
             return baseDir;
         }
 
-        // 按点号分割路径并导航到目标目录
-        return navigateToTargetDirectory(baseDir, remainingPath);
-    }
-
-    /**
-     * 去除前缀（模块名或 main）
-     */
-    @NotNull
-    private String stripPrefix(@NotNull String path, @Nullable String moduleName) {
-        if (path.startsWith("main")) {
-            String remaining = path.substring(4);
-            return remaining.startsWith(DOT) ? remaining.substring(1) : remaining;
-        }
-        if (moduleName != null && path.startsWith(moduleName)) {
-            String remaining = path.substring(moduleName.length());
-            return remaining.startsWith(DOT) ? remaining.substring(1) : remaining;
-        }
-        return path;
+        return navigateToTargetDirectory(baseDir, relativeDirPath);
     }
 
     /**
@@ -179,7 +225,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     @Nullable
     private VirtualFile navigateToTargetDirectory(@NotNull VirtualFile baseDir, @NotNull String path) {
         VirtualFile currentDir = baseDir;
-        String[] pathParts = path.split("\\.");
+        String[] pathParts = path.split("/");
         
         for (String part : pathParts) {
             if (!part.isEmpty()) {
@@ -199,16 +245,47 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      * 收集补全建议
      */
     @NotNull
-    private Set<CompletionSuggestion> collectSuggestions(@NotNull Project project, @NotNull VirtualFile currentDir) {
+    private Set<CompletionSuggestion> collectSuggestions(@NotNull Project project,
+                                                         @NotNull CompletionContext completionContext) {
         Set<CompletionSuggestion> suggestions = new HashSet<>();
-        
+
+        if (completionContext.mainPackage()) {
+            collectMainPackageInterfaceSuggestions(project, suggestions);
+            return suggestions;
+        }
+
+        VirtualFile currentDir = resolveDirectory(project, completionContext.relativeDirPath());
+        if (currentDir == null) {
+            return suggestions;
+        }
+
         // 添加子目录
         collectDirectorySuggestions(currentDir, suggestions);
-        
+
         // 添加接口
         collectInterfaceSuggestions(project, currentDir, suggestions);
         
         return suggestions;
+    }
+
+    /**
+     * 补全上下文。
+     */
+    private record CompletionContext(
+            boolean mainPackage,
+            @NotNull String relativeDirPath,
+            @NotNull String currentSegment,
+            boolean insertLeadingDot
+    ) {
+        static CompletionContext main(@NotNull String currentSegment, boolean insertLeadingDot) {
+            return new CompletionContext(true, "", currentSegment, insertLeadingDot);
+        }
+
+        static CompletionContext module(@NotNull String relativeDirPath,
+                                        @NotNull String currentSegment,
+                                        boolean insertLeadingDot) {
+            return new CompletionContext(false, relativeDirPath, currentSegment, insertLeadingDot);
+        }
     }
 
     /**
@@ -275,6 +352,25 @@ public class NamespaceCompletionContributor extends CompletionContributor {
     }
 
     /**
+     * 收集 main 包中的接口建议。
+     */
+    private void collectMainPackageInterfaceSuggestions(@NotNull Project project,
+                                                       @NotNull Set<CompletionSuggestion> suggestions) {
+        GlobalSearchScope scope = GlobalSearchScope.allScope(project);
+        for (String key : StubIndex.getInstance().getAllKeys(GoTypesIndex.KEY, project)) {
+            for (GoTypeSpec typeSpec : StubIndex.getElements(GoTypesIndex.KEY, key, project, scope, GoTypeSpec.class)) {
+                PsiFile file = typeSpec.getContainingFile();
+                if (!(file instanceof GoFile goFile) || !MAIN_PACKAGE.equals(goFile.getPackageName())) {
+                    continue;
+                }
+                if (isInterfaceType(typeSpec) && typeSpec.getName() != null) {
+                    suggestions.add(new CompletionSuggestion(typeSpec.getName(), SuggestionType.INTERFACE));
+                }
+            }
+        }
+    }
+
+    /**
      * 处理Go文件，仅提取接口类型
      */
     private void processGoFile(@NotNull GoFile goFile, @NotNull Set<CompletionSuggestion> suggestions) {
@@ -307,7 +403,8 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      */
     private void addSuggestionsToResult(@NotNull CompletionResultSet result, 
                                       @NotNull Set<CompletionSuggestion> suggestions, 
-                                      @NotNull Project project) {
+                                      @NotNull Project project,
+                                      boolean insertLeadingDot) {
         for (CompletionSuggestion suggestion : suggestions) {
             String name = suggestion.getName();
             SuggestionType type = suggestion.getType();
@@ -315,7 +412,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
             String[] parts = name.split("\\.");
             String lastPart = parts[parts.length - 1];
             
-            LookupElement element = createLookupElement(lastPart, type, project);
+            LookupElement element = createLookupElement(lastPart, type, project, insertLeadingDot);
             result.addElement(element);
         }
     }
@@ -325,7 +422,8 @@ public class NamespaceCompletionContributor extends CompletionContributor {
      */
     @NotNull
     private LookupElement createLookupElement(@NotNull String text, @NotNull SuggestionType type, 
-                                            @NotNull Project project) {
+                                            @NotNull Project project,
+                                            boolean insertLeadingDot) {
         LookupElementBuilder builder = LookupElementBuilder.create(text)
                 .withPresentableText(text);
         
@@ -336,6 +434,7 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                     .withTypeText("Directory")
                     .withItemTextForeground(JBColor.BLUE)
                     .withInsertHandler((insertContext, item) -> {
+                        insertLeadingDotIfNeeded(insertContext, insertLeadingDot);
                         insertDotAndTriggerCompletion(insertContext, project);
                     });
         } else if (type == SuggestionType.INTERFACE) {
@@ -343,10 +442,38 @@ public class NamespaceCompletionContributor extends CompletionContributor {
                     .withIcon(AllIcons.Nodes.Interface)
                     .withTypeText("Interface")
                     .withItemTextForeground(JBColor.MAGENTA)
-                    .withBoldness(true);
+                    .withBoldness(true)
+                    .withInsertHandler((insertContext, item) -> {
+                        insertLeadingDotIfNeeded(insertContext, insertLeadingDot);
+                    });
         }
         
         return builder;
+    }
+
+    /**
+     * 当前值刚好是 module/main 时，下一级补全需要先插入路径分隔点。
+     */
+    private void insertLeadingDotIfNeeded(@NotNull InsertionContext insertContext, boolean insertLeadingDot) {
+        if (!insertLeadingDot) {
+            return;
+        }
+
+        Editor editor = insertContext.getEditor();
+        Document document = editor.getDocument();
+        int startOffset = insertContext.getStartOffset();
+        if (startOffset <= 0 || startOffset > document.getTextLength()) {
+            return;
+        }
+
+        CharSequence chars = document.getCharsSequence();
+        if (chars.charAt(startOffset - 1) == '.') {
+            return;
+        }
+
+        document.insertString(startOffset, DOT);
+        insertContext.setTailOffset(insertContext.getTailOffset() + 1);
+        editor.getCaretModel().moveToOffset(insertContext.getTailOffset());
     }
 
     /**
@@ -356,10 +483,11 @@ public class NamespaceCompletionContributor extends CompletionContributor {
         Editor editor = insertContext.getEditor();
         Document document = editor.getDocument();
         
-        // 1. 处理前导点号：如果用户输入以点号开头，补全后删除它
-        int startOffset = insertContext.getStartOffset();
-        if (startOffset > 0 && document.getCharsSequence().charAt(startOffset - 1) == '.') {
+        // 1. 只处理属性值开头的点号，不能删除 a.b 中间的分隔点。
+        if (shouldDeleteLeadingDot(insertContext)) {
+            int startOffset = insertContext.getStartOffset();
             document.deleteString(startOffset - 1, startOffset);
+            insertContext.setTailOffset(insertContext.getTailOffset() - 1);
         }
 
         // 2. 处理尾部点号
@@ -389,23 +517,29 @@ public class NamespaceCompletionContributor extends CompletionContributor {
         });
     }
 
-    /**
-     * 获取相对路径
-     */
-    @NotNull
-    private String getRelativePath(@NotNull VirtualFile baseDir, @NotNull VirtualFile file) {
-        String basePath = baseDir.getPath();
-        String filePath = file.getPath();
-        
-        if (filePath.startsWith(basePath)) {
-            String relativePath = filePath.substring(basePath.length());
-            // 移除开头的斜杠
-            if (relativePath.startsWith("/")) {
-                relativePath = relativePath.substring(1);
-            }
-            // 将斜杠替换为点号
-            return relativePath.replace('/', '.');
+    private boolean shouldDeleteLeadingDot(@NotNull InsertionContext insertContext) {
+        Document document = insertContext.getDocument();
+        int startOffset = insertContext.getStartOffset();
+        if (startOffset <= 0 || startOffset > document.getTextLength()) {
+            return false;
         }
-        return "";
+
+        CharSequence chars = document.getCharsSequence();
+        int dotOffset = startOffset - 1;
+        if (chars.charAt(dotOffset) != '.') {
+            return false;
+        }
+
+        return dotOffset == findAttributeValueStartOffset(chars, dotOffset);
+    }
+
+    private int findAttributeValueStartOffset(@NotNull CharSequence chars, int beforeOffset) {
+        for (int i = beforeOffset - 1; i >= 0; i--) {
+            char c = chars.charAt(i);
+            if (c == '"' || c == '\'') {
+                return i + 1;
+            }
+        }
+        return -1;
     }
 }

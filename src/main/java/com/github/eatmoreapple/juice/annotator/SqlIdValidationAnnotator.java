@@ -2,7 +2,6 @@ package com.github.eatmoreapple.juice.annotator;
 
 import com.goide.psi.GoFile;
 import com.goide.psi.GoTypeSpec;
-import com.goide.stubs.index.GoTypesIndex;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
 import com.intellij.lang.annotation.AnnotationBuilder;
 import com.intellij.lang.annotation.AnnotationHolder;
@@ -12,8 +11,6 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.stubs.StubIndex;
 import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.psi.xml.XmlTag;
@@ -25,7 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.github.eatmoreapple.juice.util.ModuleUtils;
+import com.github.eatmoreapple.juice.resolve.MapperNamespaceResolver;
 
 /**
  * SQL ID验证注解器
@@ -140,52 +137,11 @@ public class SqlIdValidationAnnotator implements Annotator {
      * 检查方法是否存在
      */
     private boolean methodExists(@NotNull Project project, @NotNull String namespace, @NotNull String methodName) {
-        try {
-            boolean isMainNamespace = namespace.startsWith("main.");
-            String relativeNamespace = namespace;
-            String packagePath;
-            String interfaceName;
-
-            if (isMainNamespace) {
-                // main.UserMapper -> packagePath = "main", interfaceName = "UserMapper"
-                packagePath = "main";
-                interfaceName = namespace.substring(5).trim();
-            } else {
-                // 获取模块名
-                String moduleName = ModuleUtils.getModuleName(project);
-                if (moduleName == null) {
-                    return false;
-                }
-
-                if (namespace.startsWith(moduleName)) {
-                    relativeNamespace = namespace.substring(moduleName.length() + 1);
-                }
-                String[] parts = relativeNamespace.split("\\.");
-                if (parts.length < 2) {
-                    return false;
-                }
-                packagePath = parts[parts.length - 2];
-                interfaceName = parts[parts.length - 1].trim();
-            }
-
-            // 查找接口
-            GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-            Collection<GoTypeSpec> elements = StubIndex.getElements(
-                GoTypesIndex.KEY, interfaceName, project, scope, GoTypeSpec.class);
-
-            return elements.stream()
-                    .filter(element -> {
-                        String elementPackagePath = element.getContainingFile().getPackageName();
-                        if (isMainNamespace) {
-                            return "main".equals(elementPackagePath);
-                        }
-                        return elementPackagePath.endsWith(packagePath);
-                    })
-                    .anyMatch(element -> element.getAllMethods().stream()
-                            .anyMatch(method -> methodName.equals(method.getIdentifier().getText())));
-        } catch (Exception e) {
+        MapperNamespaceResolver.ResolvedNamespace resolvedNamespace = MapperNamespaceResolver.parse(project, namespace);
+        if (resolvedNamespace == null) {
             return false;
         }
+        return MapperNamespaceResolver.resolveMethod(project, resolvedNamespace, methodName) != null;
     }
 
     /**
@@ -222,54 +178,15 @@ public class SqlIdValidationAnnotator implements Annotator {
      * 查找相似的方法名
      */
     private List<String> findSimilarMethods(@NotNull Project project, @NotNull String namespace, @NotNull String methodName) {
-        try {
-            boolean isMainNamespace = namespace.startsWith("main.");
-            String relativeNamespace = namespace;
-            String packagePath;
-            String interfaceName;
-
-            if (isMainNamespace) {
-                packagePath = "main";
-                interfaceName = namespace.substring(5).trim();
-            } else {
-                // 获取模块名
-                String moduleName = ModuleUtils.getModuleName(project);
-                if (moduleName == null) {
-                    return List.of();
-                }
-
-                if (namespace.startsWith(moduleName)) {
-                    relativeNamespace = namespace.substring(moduleName.length() + 1);
-                }
-                String[] parts = relativeNamespace.split("\\.");
-                if (parts.length < 2) {
-                    return List.of();
-                }
-                packagePath = parts[parts.length - 2];
-                interfaceName = parts[parts.length - 1].trim();
-            }
-
-            GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-            Collection<GoTypeSpec> elements = StubIndex.getElements(
-                GoTypesIndex.KEY, interfaceName, project, scope, GoTypeSpec.class);
-
-            return elements.stream()
-                    .filter(element -> {
-                        String elementPackagePath = element.getContainingFile().getPackageName();
-                        if (isMainNamespace) {
-                            return "main".equals(elementPackagePath);
-                        }
-                        return elementPackagePath.endsWith(packagePath);
-                    })
-                    .flatMap(element -> element.getAllMethods().stream())
-                    .map(method -> method.getIdentifier().getText())
-                    .filter(name -> name.toLowerCase().contains(methodName.toLowerCase()) || 
-                                  methodName.toLowerCase().contains(name.toLowerCase()))
-                    .limit(5)
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
+        MapperNamespaceResolver.ResolvedNamespace resolvedNamespace = MapperNamespaceResolver.parse(project, namespace);
+        if (resolvedNamespace == null) {
             return List.of();
         }
+        return MapperNamespaceResolver.findMethodNames(project, resolvedNamespace).stream()
+                .filter(name -> name.toLowerCase().contains(methodName.toLowerCase())
+                        || methodName.toLowerCase().contains(name.toLowerCase()))
+                .limit(5)
+                .collect(Collectors.toList());
     }
 
     /**

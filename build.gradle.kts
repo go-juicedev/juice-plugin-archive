@@ -10,6 +10,11 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    testImplementation(platform("org.junit:junit-bom:5.10.2"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+}
+
 // Configure Gradle IntelliJ Plugin
 intellij {
     version.set("2023.1") // 指定 IntelliJ IDEA 版本
@@ -33,6 +38,10 @@ tasks {
 
     buildSearchableOptions {
         enabled = false
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     patchPluginXml {
